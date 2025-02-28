@@ -9,12 +9,17 @@ const authenticateUser = async (
 ) => {
   try {
     const { token } = req.body;
+    console.log("token", token);
 
     if (!token) {
       return res.status(400).json({ message: "Token is required" });
     }
 
-    const sessionId = token!.split("_")[1];
+    const sessionId = token.split("_")[1];
+    console.log("sessionId", sessionId);
+    if (!sessionId) {
+      return res.status(400).json({ message: "Invalid token format" });
+    }
 
     const session = await clerk.sessions.verifySession(sessionId, token);
     const clerkUser = await clerk.users.getUser(session.userId);
@@ -38,7 +43,7 @@ const authenticateUser = async (
       await user.save();
     }
 
-    res.json({
+    return res.json({
       user,
       token,
     });

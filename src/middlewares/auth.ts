@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { clerk } from "../config/clerk";
+import { clerkClient } from "@clerk/clerk-sdk-node";
 import { User } from "../models/user";
 
 declare global {
@@ -11,34 +11,53 @@ declare global {
   }
 }
 
-export const requireAuth = async (
+export const validateAuth = async (
   req: Request,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
+    const bearerToken = req.headers.authorization?.replace("Bearer ", "");
 
-    if (!token) {
-      res.status(401).json({ message: "Authentication required" });
+    if (!bearerToken) {
+      res.status(401).json({ message: "No token provided" });
+      return;
     }
 
-    const sessionId = token!.split("_")[1];
+    try {
+      // Use the newer verification method
+      const claims = await clerkClient.verifyToken(bearerToken);
 
-    const session = await clerk.sessions.verifySession(sessionId, token!);
-    if (!session) {
-      res.status(401).json({ message: "Invalid authentication token" });
+      if (!claims) {
+        res.status(401).json({ message: "Invalid token" });
+        return;
+      }
+
+      // Find or create user in your database
+      let user = await User.findOne({ clerkId: claims.sub });
+
+      if (!user) {
+        const clerkUser = await clerkClient.users.getUser(claims.sub);
+
+        user = await User.create({
+          clerkId: claims.sub,
+          email: clerkUser.emailAddresses[0].emailAddress,
+          firstName: clerkUser.firstName,
+          lastName: clerkUser.lastName,
+        });
+      }
+
+      req.user = user;
+      req.auth = claims;
+      next();
+    } catch (verifyError) {
+      console.error("Token verification failed:", verifyError);
+      res.status(401).json({ message: "Invalid token" });
+      return;
     }
-
-    const user = await User.findOne({ clerkId: session.userId });
-    if (!user) {
-      res.status(401).json({ message: "User not found" });
-    }
-
-    req.user = user;
-    req.auth = session;
-    next();
   } catch (error) {
+    console.error("Auth error:", error);
     res.status(401).json({ message: "Authentication failed" });
+    return;
   }
 };

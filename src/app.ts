@@ -7,7 +7,7 @@ import routes from "./routes";
 import { errorHandler } from "./middlewares/errorHandler";
 import { apiLimiter } from "./middlewares/rateLimiter";
 import { authenticateUserRouter } from "./routes/auth/auth";
-import { requireAuth } from "./middlewares/auth";
+import { validateAuth } from "./middlewares/auth";
 
 const app = express();
 
@@ -21,10 +21,18 @@ app.use(express.json());
 // app.use(morgan('dev'));
 app.use(apiLimiter);
 
-// Routes
-app.use("/api/auth", authenticateUserRouter);
+// Auth routes (unprotected)
+app.use("/api/oauth", authenticateUserRouter);
 
-app.use("/api", requireAuth, routes);
+// Public routes
+app.post("/api/auth", async (req, res) => {
+  // Handle initial authentication
+  res.json({ success: true });
+});
+
+// Protected routes
+app.use("/api", validateAuth);
+app.use("/api", routes);
 
 // Error Handler
 app.use(errorHandler);
